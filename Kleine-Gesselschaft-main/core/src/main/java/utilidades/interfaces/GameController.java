@@ -1,4 +1,4 @@
-package com.heurix.interfaces;
+package utilidades.interfaces;
 
 public interface GameController {
     void isGoal(int direction);

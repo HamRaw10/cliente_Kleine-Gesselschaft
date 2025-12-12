@@ -1,6 +1,6 @@
-package com.heurix.network;
+package utilidades.network;
 
-import com.heurix.interfaces.GameController;
+import utilidades.interfaces.GameController;
 
 import java.io.IOException;
 import java.net.*;

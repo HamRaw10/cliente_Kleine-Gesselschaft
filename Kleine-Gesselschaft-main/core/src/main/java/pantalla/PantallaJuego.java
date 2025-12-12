@@ -33,7 +33,7 @@ import com.badlogic.gdx.scenes.scene2d.InputEvent;
 
 import java.util.Iterator;
 import java.lang.reflect.Method;
-
+import utilidades.interfaces.GameController;
 import controles.ControlDelJuego;
 import entidades.Jugador;
 import entidades.EquipamentSlot; // *** NUEVO (para seed de ropa)
@@ -46,8 +46,9 @@ import utilidades.DebugOverlay;
 import utilidades.Tienda;
 import utilidades.MenuMinijuegos;
 import utilidades.items.ClothingItem; // *** NUEVO (para seed de ropa)
+import utilidades.network.ClientThread;
 
-public class PantallaJuego extends ScreenAdapter {
+public class PantallaJuego extends ScreenAdapter implements GameController {
 
     private OrthographicCamera camara;
     private ScreenViewport screenViewport;
@@ -87,7 +88,7 @@ public class PantallaJuego extends ScreenAdapter {
     private MenuMinijuegos menuMinijuegos;
     private boolean menuMinijuegosAbierto = false;
     private ScreenAdapter minijuegoActivo;
-
+    private ClientThread hiloCliente;
 
     // Transiciones
     private enum TransitionState { NONE, FADING_OUT, SWITCHING, FADING_IN }
@@ -117,6 +118,8 @@ public class PantallaJuego extends ScreenAdapter {
 
         if (Render.batch == null) Render.batch = new SpriteBatch();
         shape = new ShapeRenderer();
+        this.hiloCliente = new ClientThread(this);
+
     }
 
     // ==== Helpers ====
@@ -358,6 +361,8 @@ public class PantallaJuego extends ScreenAdapter {
         }
 
         // Spawn inicial y movimiento bloqueado
+        this.hiloCliente.start();
+        this.hiloCliente.sendMessage("Connect");
         try { manejo.cancelarMovimiento(); } catch (Exception ignored) {}
         if (jugador != null) jugador.cancelarMovimiento();
         spawnInicialHecho = false;
@@ -860,5 +865,53 @@ public class PantallaJuego extends ScreenAdapter {
             EquipamentSlot.TORSO, "Ropa/Remeras", "remera_river", 1));
         j.equiparPrimeraRopaDisponible(); // usa la ropa de la mochila en vez de hardcodear
         Gdx.app.log("SEED", "Mochila poblada con " + j.getMochila().count() + " ítems.");
+    }
+
+    @Override
+    public void isGoal(int direction) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'isGoal'");
+    }
+
+    @Override
+    public void connect(int numPlayer) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'connect'");
+    }
+
+    @Override
+    public void start() {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'start'");
+    }
+
+    @Override
+    public void updatePadPosition(int numPlayer, int y) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'updatePadPosition'");
+    }
+
+    @Override
+    public void updateBallPosition(int x, int y) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'updateBallPosition'");
+    }
+
+    @Override
+    public void updateScore(String score) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'updateScore'");
+    }
+
+    @Override
+    public void endGame(int winner) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'endGame'");
+    }
+
+    @Override
+    public void backToMenu() {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'backToMenu'");
     }
 }
