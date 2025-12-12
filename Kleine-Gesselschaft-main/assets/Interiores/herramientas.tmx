@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="15" height="15" tilewidth="16" tileheight="16" infinite="0" nextlayerid="9" nextobjectid="20">
+ <properties>
+  <property name="spawnX" type="float" value="160"/>
+  <property name="spawnY" type="float" value="64"/>
+  <property name="targetMap" value="exteriores/entretenimiento.tmx"/>
+  <property name="tipo" value="portal"/>
+  <property name="transicion" value="fade"/>
+ </properties>
  <tileset firstgid="1" source="../tsx/interior.tsx"/>
  <layer id="1" name="Tile Layer 1" width="15" height="15">
   <data encoding="csv">

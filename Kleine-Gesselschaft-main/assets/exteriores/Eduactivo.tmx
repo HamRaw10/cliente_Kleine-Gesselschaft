@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="50" height="30" tilewidth="16" tileheight="16" infinite="0" nextlayerid="6" nextobjectid="47">
+<map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="50" height="30" tilewidth="16" tileheight="16" infinite="0" nextlayerid="6" nextobjectid="49">
  <tileset firstgid="1" source="../tsx/tiles.tsx"/>
  <tileset firstgid="3016" source="../tsx/buildings_all.tsx"/>
  <layer id="1" name="Grass" width="50" height="30">
@@ -146,6 +146,13 @@
   <object id="39" x="496" y="144"/>
  </objectgroup>
  <objectgroup id="5" name="interacciones">
+  <properties>
+   <property name="spawnX" type="float" value="160"/>
+   <property name="spawnY" type="float" value="64"/>
+   <property name="targetMap" value="exteriores/entretenimiento.tmx"/>
+   <property name="tipo" value="portal"/>
+   <property name="transicion" value="fade"/>
+  </properties>
   <object id="42" x="0" y="208" width="16" height="80">
    <properties>
     <property name="spawnX" type="float" value="160"/>
@@ -164,15 +171,6 @@
     <property name="transicion" value="fade"/>
    </properties>
   </object>
-  <object id="44" x="128" y="160" width="32" height="32">
-   <properties>
-    <property name="spawnX" type="float" value="160"/>
-    <property name="spawnY" type="float" value="64"/>
-    <property name="targetMap" value="interiores/arcade.tmx"/>
-    <property name="tipo" value="portal"/>
-    <property name="transicion" value="fade"/>
-   </properties>
-  </object>
   <object id="45" x="528" y="144" width="32" height="32">
    <properties>
     <property name="spawnX" type="float" value="160"/>
@@ -186,7 +184,7 @@
    <properties>
     <property name="spawnX" type="float" value="160"/>
     <property name="spawnY" type="float" value="64"/>
-    <property name="targetMap" value="interiores/coffeShop.tmx"/>
+    <property name="targetMap" value="interiores/coffeshop2.tmx"/>
     <property name="tipo" value="portal"/>
     <property name="transicion" value="interiores/arcade.tmx"/>
    </properties>

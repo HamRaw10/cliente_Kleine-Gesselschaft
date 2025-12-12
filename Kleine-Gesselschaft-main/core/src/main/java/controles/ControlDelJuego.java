@@ -8,13 +8,11 @@ import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.viewport.Viewport;
 
 import entidades.Jugador;
-import objetos.Mapa;
 import utilidades.Colisiones;
 
 public class ControlDelJuego {
 
     private final Jugador jugador;
-    private final Mapa mapa;
     private Colisiones colisiones;
 
     private OrthographicCamera cam;
@@ -30,7 +28,6 @@ public class ControlDelJuego {
             jugador.getDinero().setCantidad(50);
             jugador.getMochila().getItems().clear(); // sin ropa inicial
         } catch (Exception ignored) {}
-        this.mapa = new Mapa();
 
         this.destinoX = jugador.getPersonajeX();
         this.destinoY = jugador.getPersonajeY();
@@ -41,17 +38,12 @@ public class ControlDelJuego {
         float mouseX = Gdx.input.getX();
         float mouseY = Gdx.input.getY();
 
-        mapa.actualizar(delta, mouseX, Gdx.graphics.getHeight() - mouseY);
-
-        if (!mapa.isExpandido() && !mapa.isInputBloqueado()) {
-            if (Gdx.input.justTouched()) {
-                Vector3 w = new Vector3(mouseX, mouseY, 0f);
-                if (viewport != null) viewport.unproject(w);
-                else if (cam != null) cam.unproject(w);
-                setDestino(w.x, w.y, true); // click para moverse
-            }
-        } else {
-            cancelarMovimiento();
+        // Click para fijar destino cuando no hay overlays bloqueando
+        if (Gdx.input.justTouched()) {
+            Vector3 w = new Vector3(mouseX, mouseY, 0f);
+            if (viewport != null) viewport.unproject(w);
+            else if (cam != null) cam.unproject(w);
+            setDestino(w.x, w.y, true);
         }
 
         if (tieneDestino) {
@@ -76,7 +68,7 @@ public class ControlDelJuego {
     public Jugador getJugador() { return jugador; }
     public InputProcessor getInputProcessor() { return null; }
     public void render(SpriteBatch batch) { jugador.render(batch); }
-    public void dispose() { jugador.dispose(); mapa.dispose(); }
+    public void dispose() { jugador.dispose(); }
 
     public void setCamera(OrthographicCamera cam) { this.cam = cam; }
     public void setViewport(Viewport viewport) { this.viewport = viewport; }

@@ -4,9 +4,12 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.Label.LabelStyle;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
@@ -35,6 +38,9 @@ public class MinijuegoCraps extends ScreenAdapter {
     private int rachaGanadas = 0;
     private boolean partidaActiva = false;
     private int apuestaActual = 0;
+    private BitmapFont fontTitulo;
+    private BitmapFont fontCuerpo;
+    private TextureRegion[] dadosRegion = new TextureRegion[6];
 
     public MinijuegoCraps(Jugador jugador, Skin skin, MenuMinijuegos.MinijuegoFinListener finListener) {
         this.jugador = jugador;
@@ -48,24 +54,34 @@ public class MinijuegoCraps extends ScreenAdapter {
         String basePath = "images_craps/";
         for (int i = 0; i < 6; i++) {
             dados[i] = new Texture(basePath + "dado" + (i + 1) + ".png");
+            dadosRegion[i] = new TextureRegion(dados[i]);
         }
 
-        lblEstado = new Label("Primera tirada. Apuesta: 10 monedas", skin);
+        // Fuentes personalizadas (usa OpenSans si está en assets/fonts, si no escala la default)
+        fontTitulo = crearFuente(26);
+        fontCuerpo = crearFuente(18);
+        LabelStyle estiloTitulo = new LabelStyle(fontTitulo, Color.BLACK);
+        LabelStyle estiloCuerpo = new LabelStyle(fontCuerpo, Color.BLACK);
+
+        lblEstado = new Label("Primera tirada. Apuesta: 10 monedas", estiloCuerpo);
         lblEstado.setWrap(true);
         lblEstado.setAlignment(Align.center);
-        lblDados = new Label("", skin);
+        lblDados = new Label("", estiloCuerpo);
         lblDados.setWrap(true);
         lblDados.setAlignment(Align.center);
-        lblPuntos = new Label("Puntos acumulados: 0", skin);
+        lblPuntos = new Label("Puntos acumulados: 0", estiloCuerpo);
         lblPuntos.setAlignment(Align.center);
-        TextButton btnJugar = new TextButton("Jugar (apostar 10)", skin);
-        TextButton btnTirar = new TextButton("Tirar Dados", skin);
-        TextButton btnSalir = new TextButton("Salir", skin);
+        TextButton btnJugar = crearBoton("Jugar (apostar 10)");
+        TextButton btnTirar = crearBoton("Tirar Dados");
+        TextButton btnSalir = crearBoton("Salir");
         btnJugar.addListener(event -> {
             if (btnJugar.isPressed()) iniciarPartida();
             return true;
         });
-        btnTirar.addListener(event -> tirarDados());
+        btnTirar.addListener(event -> {
+            if (btnTirar.isPressed()) tirarDados();
+            return true;
+        });
         btnSalir.addListener(event -> {
             if (btnSalir.isPressed()) salir();
             return true;
@@ -74,6 +90,7 @@ public class MinijuegoCraps extends ScreenAdapter {
         Table table = new Table(skin);
         table.setFillParent(true);
         table.center();
+        table.add(new Label("Craps", estiloTitulo)).width(460f).padBottom(10f).row();
         table.add(lblEstado).width(460f).pad(6f).row();
         table.add(lblDados).width(460f).pad(4f).row();
         table.add(lblPuntos).width(460f).pad(4f).row();
@@ -81,6 +98,37 @@ public class MinijuegoCraps extends ScreenAdapter {
         table.add(btnTirar).size(220, 52).padTop(8f).row();
         table.add(btnSalir).size(220, 48).padTop(8f).row();
         stage.addActor(table);
+    }
+
+    private BitmapFont crearFuente(int size) {
+        String ttfPath = Gdx.files.internal("fonts/OpenSans-SemiBold.ttf").exists()
+            ? "fonts/OpenSans-SemiBold.ttf"
+            : (Gdx.files.internal("fonts/Body.ttf").exists() ? "fonts/Body.ttf" : null);
+        if (ttfPath != null && Gdx.files.internal(ttfPath).exists()) {
+            FreeTypeFontGenerator gen = new FreeTypeFontGenerator(Gdx.files.internal(ttfPath));
+            FreeTypeFontGenerator.FreeTypeFontParameter p = new FreeTypeFontGenerator.FreeTypeFontParameter();
+            p.size = size;
+            p.color = Color.BLACK;
+            BitmapFont font = gen.generateFont(p);
+            gen.dispose();
+            return font;
+        }
+        BitmapFont fallback = new BitmapFont();
+        fallback.getData().setScale(size / 18f); // escalar default
+        fallback.setColor(Color.BLACK);
+        return fallback;
+    }
+
+    private TextButton crearBoton(String texto) {
+        TextButton.TextButtonStyle base = skin.get(TextButton.TextButtonStyle.class);
+        TextButton.TextButtonStyle estilo = new TextButton.TextButtonStyle();
+        estilo.up = base.up;
+        estilo.down = base.down;
+        estilo.checked = base.checked;
+        estilo.over = base.over;
+        estilo.font = fontCuerpo;
+        estilo.fontColor = Color.BLACK;
+        return new TextButton(texto, estilo);
     }
 
     private void iniciarPartida() {
@@ -152,7 +200,7 @@ public class MinijuegoCraps extends ScreenAdapter {
 
     @Override
     public void render(float delta) {
-        Gdx.gl.glClearColor(0, 0, 0, 0.5f);
+        Gdx.gl.glClearColor(1f, 1f, 1f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         stage.act(delta);
@@ -160,9 +208,18 @@ public class MinijuegoCraps extends ScreenAdapter {
 
         // Dibujar dados si hay resultado
         if (dado1 > 0) {
+            batch.setProjectionMatrix(stage.getCamera().combined);
             batch.begin();
-            batch.draw(new TextureRegion(dados[dado1 - 1]), 200, 300, 100, 100);
-            batch.draw(new TextureRegion(dados[dado2 - 1]), 350, 300, 100, 100);
+            // Tinte oscuro para contrastar con el fondo blanco
+            batch.setColor(Color.DARK_GRAY);
+            float size = calcularTamanoDado();
+            float espacio = size * 0.4f;
+            float total = size * 2 + espacio;
+            float startX = (Gdx.graphics.getWidth() - total) / 2f;
+            float y = (Gdx.graphics.getHeight() * 0.7f) - (size / 2f);
+            batch.draw(dadosRegion[dado1 - 1], startX, y, size, size);
+            batch.draw(dadosRegion[dado2 - 1], startX + size + espacio, y, size, size);
+            batch.setColor(Color.WHITE);
             batch.end();
         }
 
@@ -181,6 +238,19 @@ public class MinijuegoCraps extends ScreenAdapter {
     public void dispose() {
         stage.dispose();
         batch.dispose();
+        if (fontTitulo != null) fontTitulo.dispose();
+        if (fontCuerpo != null) fontCuerpo.dispose();
         for (Texture t : dados) t.dispose();
+    }
+
+    private float calcularTamanoDado() {
+        float base = Math.min(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+        return Math.max(90f, Math.min(180f, base * 0.14f));
+    }
+
+    @Override
+    public void resize(int width, int height) {
+        stage.getViewport().update(width, height, true);
+        batch.setProjectionMatrix(stage.getCamera().combined);
     }
 }

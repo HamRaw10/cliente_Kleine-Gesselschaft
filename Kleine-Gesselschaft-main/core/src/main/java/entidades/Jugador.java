@@ -13,7 +13,7 @@ import utilidades.items.VisualOutfit;
 import entidades.EquipamentSlot;
 import utilidades.Animacion;
 import utilidades.Colisiones;
-import utilidades.Moneda;// ⬅️ NUEVO
+import utilidades.Moneda;
 import utilidades.items.ClothingAnimationSet;
 import utilidades.items.Item;
 
@@ -22,11 +22,11 @@ public class Jugador extends Personaje {
 
     private Colisiones colisiones;
 
-    // Hitbox de “pies”: ajustá a tu sprite real
-    private final float hitW = 12f * escala, hitH = 15f * escala;
-    private final float hitOffsetX; // (spriteWidth - hitW)/2
-    private final float hitOffsetY; // cuanto subís/bajás el rect respecto del origen del sprite
-
+    // Hitbox de “pies”: valores base (se escalan junto al sprite)
+    private final float baseHitW = 12f;
+    private final float baseHitH = 15f;
+    private final float offsetFactorX = -0.7f; // relativo al ancho
+    private final float offsetFactorY = -0.8f; // relativo al alto
     private final Rectangle hitbox;
 
     private float velPx = 160f;
@@ -71,9 +71,10 @@ public class Jugador extends Personaje {
         float spriteW = getWidth();
         float spriteH = getHeight();
 
-        this.hitOffsetX = -hitW * 0.7f;  // Centro horizontal de la hitbox en personajeX
-        this.hitOffsetY = -hitH * 0.8f;  // Centro vertical de la hitbox en personajeY
-
+        float hitW = baseHitW * escala;
+        float hitH = baseHitH * escala;
+        float hitOffsetX = hitW * offsetFactorX;
+        float hitOffsetY = hitH * offsetFactorY;
         this.hitbox = new Rectangle(personajeX + hitOffsetX, personajeY + hitOffsetY, hitW, hitH);
 
         this.animacionIdle = Animacion.crearAnimacionDesdeCarpeta("personaje/adelante", 5, 0.2f);
@@ -168,7 +169,18 @@ public class Jugador extends Personaje {
     }
 
     private void syncHitbox() {
+        float hitW = baseHitW * escala;
+        float hitH = baseHitH * escala;
+        float hitOffsetX = hitW * offsetFactorX;
+        float hitOffsetY = hitH * offsetFactorY;
+        hitbox.setSize(hitW, hitH);
         hitbox.setPosition(personajeX + hitOffsetX, personajeY + hitOffsetY);
+    }
+
+    @Override
+    public void setEscala(float escala) {
+        super.setEscala(escala);
+        syncHitbox();
     }
 
     public void setPos(float x, float y) {

@@ -3,11 +3,14 @@ package pantalla;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.ImageButton;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
@@ -38,6 +41,10 @@ public class MinijuegoCaraCruz extends ScreenAdapter {
     private int rachaGanadas = 0;
     private Boolean eleccionActual = null; // true = cara, false = cruz
     private int apuestaActual = 0;
+    private BitmapFont fontTitulo;
+    private BitmapFont fontCuerpo;
+    private TextureRegion regionCara;
+    private TextureRegion regionCruz;
 
     public MinijuegoCaraCruz(Jugador jugador, Skin skin, MenuMinijuegos.MinijuegoFinListener finListener) {
         this.jugador = jugador;
@@ -57,20 +64,25 @@ public class MinijuegoCaraCruz extends ScreenAdapter {
             new TextureRegion(monedaCruz)
         };
         animGiro = new Animation<>(0.1f, framesGiro);
+        regionCara = framesGiro[0];
+        regionCruz = framesGiro[1];
+
+        fontTitulo = crearFuente(26);
+        fontCuerpo = crearFuente(18);
 
         // UI: Botones para elegir
         ImageButton btnCara = new ImageButton(new TextureRegionDrawable(new TextureRegion(monedaCara)));
         ImageButton btnCruz = new ImageButton(new TextureRegionDrawable(new TextureRegion(monedaCruz)));
-        lblResultado = new Label("", skin);
-        lblPuntos = new Label("Puntos acumulados: 0", skin);
-        Label lblSeleccion = new Label("Selecciona Cara o Cruz y luego presiona Jugar", skin);
-        TextButton btnSalir = new TextButton("Salir", skin);
-        TextButton btnJugar = new TextButton("Jugar", skin);
+        lblResultado = new Label("", new Label.LabelStyle(fontCuerpo, Color.WHITE));
+        lblPuntos = new Label("Puntos acumulados: 0", new Label.LabelStyle(fontCuerpo, Color.WHITE));
+        Label lblSeleccion = new Label("Selecciona Cara o Cruz y luego presiona Jugar", new Label.LabelStyle(fontCuerpo, Color.WHITE));
+        TextButton btnSalir = crearBoton("Salir");
+        TextButton btnJugar = crearBoton("Jugar");
 
         Table table = new Table(skin);
         table.setFillParent(true);
         table.center();
-        table.add(new Label("Elige: Cara o Cruz (Apuesta: 10 monedas)", skin)).colspan(2).row();
+        table.add(new Label("Cara o Cruz (Apuesta: 10 monedas)", new Label.LabelStyle(fontTitulo, Color.WHITE))).colspan(2).padBottom(8f).row();
         table.add(btnCara).size(100).pad(10);
         table.add(btnCruz).size(100).pad(10).row();
         table.add(lblSeleccion).colspan(2).padTop(4f).row();
@@ -133,7 +145,10 @@ public class MinijuegoCaraCruz extends ScreenAdapter {
             tiempoAnimacion += delta;
             batch.begin();
             TextureRegion frame = animGiro.getKeyFrame(tiempoAnimacion, true);
-            batch.draw(frame, Gdx.graphics.getWidth() / 2 - 50, Gdx.graphics.getHeight() / 2 - 50, 100, 100);
+            float size = calcularTamanoMoneda();
+            float x = (Gdx.graphics.getWidth() - size) / 2f;
+            float y = (Gdx.graphics.getHeight() - size) / 2f;
+            batch.draw(frame, x, y, size, size);
             batch.end();
 
             if (tiempoAnimacion > 1f) { // Fin de animación
@@ -148,9 +163,12 @@ public class MinijuegoCaraCruz extends ScreenAdapter {
     }
 
     private void mostrarResultado() {
-        TextureRegion resultadoTex = resultadoCara ? new TextureRegion(monedaCara) : new TextureRegion(monedaCruz);
+        TextureRegion resultadoTex = resultadoCara ? regionCara : regionCruz;
+        float size = calcularTamanoMoneda();
+        float x = (Gdx.graphics.getWidth() - size) / 2f;
+        float y = (Gdx.graphics.getHeight() - size) / 2f;
         batch.begin();
-        batch.draw(resultadoTex, Gdx.graphics.getWidth() / 2 - 50, Gdx.graphics.getHeight() / 2 - 50, 100, 100);
+        batch.draw(resultadoTex, x, y, size, size);
         batch.end();
 
         if (resultadoCara) {
@@ -179,5 +197,47 @@ public class MinijuegoCaraCruz extends ScreenAdapter {
         batch.dispose();
         monedaCara.dispose();
         monedaCruz.dispose();
+        if (fontTitulo != null) fontTitulo.dispose();
+        if (fontCuerpo != null) fontCuerpo.dispose();
+    }
+
+    private BitmapFont crearFuente(int size) {
+        String ttfPath = Gdx.files.internal("fonts/OpenSans-SemiBold.ttf").exists()
+            ? "fonts/OpenSans-SemiBold.ttf"
+            : (Gdx.files.internal("fonts/Body.ttf").exists() ? "fonts/Body.ttf" : null);
+        if (ttfPath != null && Gdx.files.internal(ttfPath).exists()) {
+            FreeTypeFontGenerator gen = new FreeTypeFontGenerator(Gdx.files.internal(ttfPath));
+            FreeTypeFontGenerator.FreeTypeFontParameter p = new FreeTypeFontGenerator.FreeTypeFontParameter();
+            p.size = size;
+            p.color = Color.WHITE;
+            BitmapFont font = gen.generateFont(p);
+            gen.dispose();
+            return font;
+        }
+        BitmapFont fallback = new BitmapFont();
+        fallback.getData().setScale(size / 18f);
+        return fallback;
+    }
+
+    private TextButton crearBoton(String texto) {
+        TextButton.TextButtonStyle base = skin.get(TextButton.TextButtonStyle.class);
+        TextButton.TextButtonStyle estilo = new TextButton.TextButtonStyle();
+        estilo.up = base.up;
+        estilo.down = base.down;
+        estilo.checked = base.checked;
+        estilo.over = base.over;
+        estilo.font = fontCuerpo;
+        estilo.fontColor = Color.WHITE;
+        return new TextButton(texto, estilo);
+    }
+
+    private float calcularTamanoMoneda() {
+        float base = Math.min(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+        return Math.max(80f, Math.min(180f, base * 0.18f));
+    }
+
+    @Override
+    public void resize(int width, int height) {
+        stage.getViewport().update(width, height, true);
     }
 }

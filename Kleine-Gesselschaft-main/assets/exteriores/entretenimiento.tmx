@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="50" height="30" tilewidth="16" tileheight="16" infinite="0" nextlayerid="6" nextobjectid="24">
+ <properties>
+  <property name="spawnX" type="float" value="160"/>
+  <property name="spawnY" type="float" value="64"/>
+  <property name="targetMap" value="exteriores/entretenimiento.tmx"/>
+  <property name="tipo" value="portal"/>
+  <property name="transicion" value="fade"/>
+ </properties>
  <tileset firstgid="1" source="../tsx/tiles.tsx"/>
  <tileset firstgid="3016" source="../tsx/buildings_all.tsx"/>
  <layer id="1" name="Grass" width="50" height="30">

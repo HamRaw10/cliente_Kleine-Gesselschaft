@@ -118,7 +118,7 @@
   <properties>
    <property name="spawnX" type="float" value="160"/>
    <property name="spawnY" type="float" value="64"/>
-   <property name="targetMap" value="exteriores/entretenimiento.tmx"/>
+   <property name="targetMap" value="exteriores/Eduactivo.tmx"/>
    <property name="tipo" value="portal"/>
    <property name="transicion" value="fade"/>
   </properties>
@@ -126,7 +126,7 @@
    <properties>
     <property name="spawnX" type="float" value="160"/>
     <property name="spawnY" type="float" value="64"/>
-    <property name="targetMap" value="exteriores/centro.tmx"/>
+    <property name="targetMap" value="exteriores/Eduactivo.tmx"/>
     <property name="tipo" value="portal"/>
     <property name="transicion" value="fade"/>
    </properties>
