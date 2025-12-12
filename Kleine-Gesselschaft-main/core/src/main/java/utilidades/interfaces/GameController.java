@@ -1,15 +1,13 @@
 package utilidades.interfaces;
 
 public interface GameController {
-    void isGoal(int direction);
-
     void connect(int numPlayer);
 
     void start();
 
-    void updatePadPosition(int numPlayer, int y);
+    void updatePlayerPosition(int numPlayer, float x, float y);
 
-    void updateBallPosition(int x, int y);
+    void playerLeft(int numPlayer);
 
     void updateScore(String score);
 

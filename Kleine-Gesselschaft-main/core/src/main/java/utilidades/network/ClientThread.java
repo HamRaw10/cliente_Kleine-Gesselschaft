@@ -9,16 +9,18 @@ public class ClientThread extends Thread {
 
     private DatagramSocket socket;
     private int serverPort = 5555;
-    private String ipServerStr = "255.255.255.255";
+    private String ipServerStr = "127.0.0.1";
     private InetAddress ipServer;
     private boolean end = false;
     private GameController gameController;
+    private int playerId = -1;
 
     public ClientThread(GameController gameController) {
         try {
             this.gameController = gameController;
             ipServer = InetAddress.getByName(ipServerStr);
             socket = new DatagramSocket();
+            socket.setBroadcast(true);
         } catch (SocketException | UnknownHostException e) {
 //            throw new RuntimeException(e);
         }
@@ -38,7 +40,7 @@ public class ClientThread extends Thread {
     }
 
     private void processMessage(DatagramPacket packet) {
-        String message = (new String(packet.getData())).trim();
+        String message = (new String(packet.getData(), 0, packet.getLength())).trim();
         String[] parts = message.split(":");
 
         System.out.println("Mensaje recibido: " + message);
@@ -50,7 +52,8 @@ public class ClientThread extends Thread {
             case "Connected":
                 System.out.println("Conectado al servidor");
                 this.ipServer = packet.getAddress();
-                gameController.connect(Integer.parseInt(parts[1]));
+                this.playerId = Integer.parseInt(parts[1]);
+                gameController.connect(this.playerId);
                 break;
             case "Full":
                 System.out.println("Servidor lleno");
@@ -59,15 +62,34 @@ public class ClientThread extends Thread {
             case "Start":
                 this.gameController.start();
                 break;
-            case "UpdatePosition":
-                switch(parts[1]){
-                    case "Pad":
-                        this.gameController.updatePadPosition(Integer.parseInt(parts[2]), Integer.parseInt(parts[3]));
-                        break;
-                    case "Ball":
-                        this.gameController.updateBallPosition(Integer.parseInt(parts[2]), Integer.parseInt(parts[3]));
-                        break;
+            case "PlayerPos":
+                this.gameController.updatePlayerPosition(
+                    Integer.parseInt(parts[1]),
+                    Float.parseFloat(parts[2]),
+                    Float.parseFloat(parts[3])
+                );
+                break;
+            case "Move": // compatibilidad con el servidor externo
+                // Puede venir como Move:id:x:y o Move:x:y (sin id en el connect)
+                if (parts.length >= 4) {
+                    this.gameController.updatePlayerPosition(
+                        Integer.parseInt(parts[1]),
+                        Float.parseFloat(parts[2]),
+                        Float.parseFloat(parts[3])
+                    );
+                } else if (parts.length == 3 && playerId > 0) {
+                    // Si no trae id, asumimos que es nuestra propia posición eco; la ignoramos
+                    break;
                 }
+                break;
+            case "PlayerJoined":
+                // Alguien nuevo entró: mando mi posición para que me vean
+                try {
+                    gameController.updatePlayerPosition(Integer.parseInt(parts[1]), -1, -1);
+                } catch (Exception ignored) {}
+                break;
+            case "PlayerLeft":
+                this.gameController.playerLeft(Integer.parseInt(parts[1]));
                 break;
             case "UpdateScore":
                 this.gameController.updateScore(parts[1]);
@@ -90,6 +112,21 @@ public class ClientThread extends Thread {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public void sendConnect(float x, float y) {
+        sendMessage("Connect:" + x + ":" + y);
+    }
+
+    public void sendPosition(float x, float y) {
+        // Enviamos ambos formatos para ser compatibles con el servidor interno (Pos/PlayerPos)
+        // y el servidor externo (Move).
+        sendMessage("Pos:" + x + ":" + y);
+        sendMessage("Move:" + x + ":" + y);
+    }
+
+    public int getPlayerId() {
+        return playerId;
     }
 
     public void terminate() {

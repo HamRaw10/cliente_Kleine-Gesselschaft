@@ -32,7 +32,10 @@ import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 
 import java.util.Iterator;
+import java.util.HashMap;
+import java.util.Map;
 import java.lang.reflect.Method;
+import java.net.SocketException;
 import utilidades.interfaces.GameController;
 import controles.ControlDelJuego;
 import entidades.Jugador;
@@ -47,6 +50,7 @@ import utilidades.Tienda;
 import utilidades.MenuMinijuegos;
 import utilidades.items.ClothingItem; // *** NUEVO (para seed de ropa)
 import utilidades.network.ClientThread;
+import utilidades.network.ServerThread;
 
 public class PantallaJuego extends ScreenAdapter implements GameController {
 
@@ -89,6 +93,10 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
     private boolean menuMinijuegosAbierto = false;
     private ScreenAdapter minijuegoActivo;
     private ClientThread hiloCliente;
+    private static ServerThread hiloServidor;
+    private final Map<Integer, Jugador> otrosJugadores = new HashMap<>();
+    private int idJugadorLocal = -1;
+    private float tiempoEnvioPos = 0f;
 
     // Transiciones
     private enum TransitionState { NONE, FADING_OUT, SWITCHING, FADING_IN }
@@ -118,8 +126,22 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
 
         if (Render.batch == null) Render.batch = new SpriteBatch();
         shape = new ShapeRenderer();
+        iniciarServidorSiPosible();
         this.hiloCliente = new ClientThread(this);
 
+    }
+
+    private void iniciarServidorSiPosible() {
+        if (hiloServidor != null && hiloServidor.isAlive()) return;
+        try {
+            hiloServidor = new ServerThread(this);
+            hiloServidor.start();
+            Gdx.app.log("NETWORK", "Servidor UDP iniciado en el puerto 5555");
+        } catch (SocketException e) {
+            Gdx.app.log("NETWORK", "Servidor no disponible (ya existe?): " + e.getMessage());
+        } catch (Exception e) {
+            Gdx.app.log("NETWORK", "Error iniciando servidor: " + e.getMessage());
+        }
     }
 
     // ==== Helpers ====
@@ -266,6 +288,9 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
         try {
             Method m = manejo.getClass().getMethod("setColisiones", Colisiones.class);
             m.invoke(manejo, colisiones);
+            for (Jugador j : otrosJugadores.values()) {
+                j.setColisiones(colisiones);
+            }
         } catch (Exception ignored) { }
     }
 
@@ -362,7 +387,11 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
 
         // Spawn inicial y movimiento bloqueado
         this.hiloCliente.start();
-        this.hiloCliente.sendMessage("Connect");
+        if (jugador != null) {
+            this.hiloCliente.sendConnect(jugador.getPersonajeX(), jugador.getPersonajeY());
+        } else {
+            this.hiloCliente.sendMessage("Connect");
+        }
         try { manejo.cancelarMovimiento(); } catch (Exception ignored) {}
         if (jugador != null) jugador.cancelarMovimiento();
         spawnInicialHecho = false;
@@ -617,6 +646,15 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
         }
     }
 
+    private void enviarPosicionPeriodica(float delta) {
+        if (hiloCliente == null || jugador == null || idJugadorLocal <= 0) return;
+        tiempoEnvioPos += delta;
+        if (tiempoEnvioPos >= 0.1f) {
+            tiempoEnvioPos = 0f;
+            hiloCliente.sendPosition(jugador.getPersonajeX(), jugador.getPersonajeY());
+        }
+    }
+
     // ==== INVENTARIO: helpers ====
     private void abrirInventario() {
         if (inventario == null) return;
@@ -669,6 +707,7 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
         }
 
         manejo.actualizar(delta);
+        enviarPosicionPeriodica(delta);
 
         // Si el jugador aparece post-update, hacer spawn ahora
         if (jugador == null) {
@@ -717,6 +756,9 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
         Render.batch.setProjectionMatrix(camara.combined);
         Render.batch.begin();
         manejo.render(Render.batch);
+        for (Jugador jRemoto : otrosJugadores.values()) {
+            jRemoto.render(Render.batch);
+        }
         Render.batch.end();
 
         mapRenderer.render(toIntArray(arriba)); // techos / carteles
@@ -820,6 +862,10 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
         if (debugOverlay != null) debugOverlay.dispose();
         if (menuMinijuegos != null) menuMinijuegos.dispose();
         if (minijuegoActivo != null) minijuegoActivo.dispose();
+        if (hiloCliente != null) {
+            try { hiloCliente.sendMessage("Disconnect"); } catch (Exception ignored) {}
+            hiloCliente.terminate();
+        }
     }
 
     private String areaActual = null;
@@ -868,50 +914,58 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
     }
 
     @Override
-    public void isGoal(int direction) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isGoal'");
-    }
-
-    @Override
     public void connect(int numPlayer) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'connect'");
+        this.idJugadorLocal = numPlayer;
+        Gdx.app.log("NETWORK", "Jugador local conectado con id " + numPlayer);
+        if (jugador != null && hiloCliente != null) {
+            hiloCliente.sendPosition(jugador.getPersonajeX(), jugador.getPersonajeY());
+        }
     }
 
     @Override
     public void start() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'start'");
+        Gdx.app.log("NETWORK", "Partida lista, al menos 2 clientes.");
     }
 
     @Override
-    public void updatePadPosition(int numPlayer, int y) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'updatePadPosition'");
+    public void updatePlayerPosition(int numPlayer, float x, float y) {
+        // El hilo de red no tiene contexto OpenGL; pasamos todo al hilo de render con postRunnable
+        Gdx.app.postRunnable(() -> {
+            if (numPlayer == idJugadorLocal) return;
+            Jugador remoto = otrosJugadores.get(numPlayer);
+            if (remoto == null) {
+                remoto = new Jugador(colisiones);
+                try { remoto.getMochila().getItems().clear(); } catch (Exception ignored) {}
+                otrosJugadores.put(numPlayer, remoto);
+                Gdx.app.log("NETWORK", "Creado jugador remoto id " + numPlayer);
+            }
+            if (x >= 0 && y >= 0) {
+                remoto.setPos(x, y);
+                Gdx.app.log("NETWORK", "Pos remota id " + numPlayer + " -> ("+x+","+y+")");
+            } else if (jugador != null && hiloCliente != null && idJugadorLocal > 0) {
+                // El nuevo jugador nos avisó; reenviamos nuestra posición para sync
+                hiloCliente.sendPosition(jugador.getPersonajeX(), jugador.getPersonajeY());
+            }
+        });
     }
 
     @Override
-    public void updateBallPosition(int x, int y) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'updateBallPosition'");
+    public void playerLeft(int numPlayer) {
+        Gdx.app.postRunnable(() -> otrosJugadores.remove(numPlayer));
     }
 
     @Override
     public void updateScore(String score) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'updateScore'");
+        Gdx.app.log("NETWORK", "Score: " + score);
     }
 
     @Override
     public void endGame(int winner) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'endGame'");
+        Gdx.app.log("NETWORK", "Fin de juego, ganador: " + winner);
     }
 
     @Override
     public void backToMenu() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'backToMenu'");
+        // Se puede implementar flujo de menú; por ahora no-op para no romper la pantalla.
     }
 }
