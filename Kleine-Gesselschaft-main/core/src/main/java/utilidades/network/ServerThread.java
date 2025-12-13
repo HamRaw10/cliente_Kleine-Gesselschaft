@@ -22,6 +22,7 @@ public class ServerThread extends Thread {
         final int port;
         float lastX;
         float lastY;
+        String currentMap;
         boolean hasPos;
 
         ClientInfo(int id, InetAddress ip, int port) {
@@ -71,7 +72,6 @@ public class ServerThread extends Thread {
         if (message.isEmpty()) return;
         String[] parts = message.split(":");
         int index = findClientIndex(packet);
-        System.out.println("Mensaje recibido " + message);
 
         switch (parts[0]) {
             case "Connect":
@@ -80,6 +80,12 @@ public class ServerThread extends Thread {
             case "Pos":
             case "Move": // aceptar ambos formatos para compatibilidad
                 handlePosition(parts, index);
+                break;
+            case "MapPos":
+                handleMapPos(parts, index);
+                break;
+            case "Chat":
+                handleChat(message, index);
                 break;
             case "Disconnect":
                 handleDisconnect(index);
@@ -107,6 +113,10 @@ public class ServerThread extends Thread {
                 newClient.lastX = Float.parseFloat(parts[1]);
                 newClient.lastY = Float.parseFloat(parts[2]);
                 newClient.hasPos = true;
+                // Si el connect trae mapa (Connect:x:y:map) lo guardamos
+                if (parts.length >= 4) {
+                    newClient.currentMap = parts[3];
+                }
             } catch (NumberFormatException ignored) {}
         }
         clients.add(newClient);
@@ -114,6 +124,9 @@ public class ServerThread extends Thread {
 
         // Avisar a todos que hay un nuevo jugador disponible
         broadcast("PlayerJoined:" + connectedClients, newClient.id);
+        if (newClient.currentMap != null) {
+            broadcast("MapPos:" + newClient.id + ":" + newClient.currentMap + ":" + newClient.lastX + ":" + newClient.lastY, newClient.id);
+        }
 
         // Enviar su propia posición inicial al resto si la envió en el connect
         if (newClient.hasPos) {
@@ -128,6 +141,10 @@ public class ServerThread extends Thread {
                     newClient.ip, newClient.port);
                 sendMessage("Move:" + client.id + ":" + client.lastX + ":" + client.lastY,
                     newClient.ip, newClient.port);
+                if (client.currentMap != null) {
+                    sendMessage("MapPos:" + client.id + ":" + client.currentMap + ":" + client.lastX + ":" + client.lastY,
+                        newClient.ip, newClient.port);
+                }
             }
         }
 
@@ -158,6 +175,23 @@ public class ServerThread extends Thread {
         }
     }
 
+    private void handleMapPos(String[] parts, int index) {
+        if (index == -1) return;
+        ClientInfo client = clients.get(index);
+        try {
+            int start = (parts.length == 5) ? 2 : 1; // MapPos:id:map:x:y ó MapPos:map:x:y
+            String map = parts[start];
+            float x = Float.parseFloat(parts[start + 1]);
+            float y = Float.parseFloat(parts[start + 2]);
+            client.lastX = x;
+            client.lastY = y;
+            client.currentMap = map;
+            client.hasPos = true;
+            broadcast("MapPos:" + client.id + ":" + map + ":" + x + ":" + y, client.id);
+        } catch (Exception ignored) {
+        }
+    }
+
     private void handleDisconnect(int index) {
         if (index == -1) return;
         ClientInfo client = clients.remove(index);
@@ -166,6 +200,24 @@ public class ServerThread extends Thread {
         if (connectedClients == 0 && gameController != null) {
             gameController.backToMenu();
         }
+    }
+
+    private void handleChat(String rawMessage, int index) {
+        if (index == -1) return;
+        // Mensaje entrante: Chat:<texto libre>
+        String text = "";
+        int colon = rawMessage.indexOf(':');
+        if (colon != -1 && colon + 1 < rawMessage.length()) {
+            text = rawMessage.substring(colon + 1);
+        }
+        text = text.replace("\n", " ").replace("\r", " ").trim();
+        if (text.isEmpty()) return;
+        if (text.length() > 120) {
+            text = text.substring(0, 120);
+        }
+        ClientInfo sender = clients.get(index);
+        System.out.println("CHAT RECV de " + sender.id + ": " + text);
+        broadcast("Chat:" + sender.id + ":" + text, -1);
     }
 
     private int findClientIndex(DatagramPacket packet) {
@@ -183,6 +235,9 @@ public class ServerThread extends Thread {
         DatagramPacket packet = new DatagramPacket(byteMessage, byteMessage.length, clientIp, clientPort);
         try {
             socket.send(packet);
+            if (message.startsWith("Chat:")) {
+                System.out.println("TX -> " + message + " a " + clientIp + ":" + clientPort);
+            }
         } catch (IOException e) {
             if (!end) {
                 e.printStackTrace();

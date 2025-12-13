@@ -13,5 +13,9 @@ public interface GameController {
 
     void endGame(int winner);
 
+    void updateChatMessage(int playerId, String message);
+
+    void updatePlayerPositionInMap(int numPlayer, float x, float y, String mapName);
+
     void backToMenu();
 }

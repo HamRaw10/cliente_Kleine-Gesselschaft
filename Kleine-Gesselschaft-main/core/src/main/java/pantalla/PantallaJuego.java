@@ -43,6 +43,7 @@ import entidades.EquipamentSlot; // *** NUEVO (para seed de ropa)
 import utilidades.Chat;
 import utilidades.Colisiones;
 import utilidades.Inventario;
+import utilidades.interfaces.ChatListener;
 import utilidades.Portal;
 import utilidades.Render;
 import utilidades.DebugOverlay;
@@ -95,6 +96,7 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
     private ClientThread hiloCliente;
     private static ServerThread hiloServidor;
     private final Map<Integer, Jugador> otrosJugadores = new HashMap<>();
+    private final Map<Integer, String> mapaJugadores = new HashMap<>();
     private int idJugadorLocal = -1;
     private float tiempoEnvioPos = 0f;
 
@@ -316,6 +318,8 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
         cargarPortalesDesdeTiled(mapaTiled);
         cargarTiendasDesdeTiled(mapaTiled);
         cargarMinijuegosDesdeTiled(mapaTiled);
+        // Limpiar remotos al cambiar de mapa para evitar sprites fantasmas de otros escenarios
+        otrosJugadores.clear();
         cerrarTienda(); // por si había una abierta en otro mapa
 
         float worldW = MAP_WIDTH * TILE_SIZE_W * UNIT_SCALE;
@@ -354,7 +358,11 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
 
         // Chat e Inventario
         if (jugador != null && skinUI != null) {
-            chat = new Chat(skinUI, jugador, camara);
+            chat = new Chat(skinUI, jugador, camara, mensaje -> {
+                if (hiloCliente != null) {
+                    hiloCliente.sendChat(mensaje);
+                }
+            });
             inventario = new Inventario(stageInventario, skinUI, jugador); // ← firma correcta
             tiendaHippie = Tienda.crearTiendaHippie();
         }
@@ -388,9 +396,12 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
         // Spawn inicial y movimiento bloqueado
         this.hiloCliente.start();
         if (jugador != null) {
-            this.hiloCliente.sendConnect(jugador.getPersonajeX(), jugador.getPersonajeY());
+            this.hiloCliente.sendConnect(jugador.getCentroX(), jugador.getCentroY(), mapaActualPath);
+            if (mapaActualPath != null) {
+                this.hiloCliente.sendPositionWithMap(jugador.getCentroX(), jugador.getCentroY(), mapaActualPath);
+            }
         } else {
-            this.hiloCliente.sendMessage("Connect");
+            this.hiloCliente.sendConnect(0f, 0f, mapaActualPath);
         }
         try { manejo.cancelarMovimiento(); } catch (Exception ignored) {}
         if (jugador != null) jugador.cancelarMovimiento();
@@ -458,6 +469,14 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
 
         if (jugador != null) {
             jugador.setEscala(esInterior ? 0.7f : 1f);
+        }
+        // Ajustar escala de los jugadores remotos para que no se dibujen enormes en interiores
+        for (Jugador remoto : otrosJugadores.values()) {
+            remoto.setEscala(esInterior ? 0.7f : 1f);
+        }
+        // Avisar de nuestro mapa/pos actual para que los otros clientes no nos vean si están en otro mapa
+        if (hiloCliente != null && jugador != null) {
+            hiloCliente.sendPositionWithMap(jugador.getCentroX(), jugador.getCentroY(), mapaActualPath);
         }
 
         spawnInicialHecho = true; // evitar re-ubicación automática al centro en el siguiente render
@@ -651,7 +670,8 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
         tiempoEnvioPos += delta;
         if (tiempoEnvioPos >= 0.1f) {
             tiempoEnvioPos = 0f;
-            hiloCliente.sendPosition(jugador.getPersonajeX(), jugador.getPersonajeY());
+            String map = mapaActualPath != null ? mapaActualPath : "unknown";
+            hiloCliente.sendPositionWithMap(jugador.getCentroX(), jugador.getCentroY(), map);
         }
     }
 
@@ -713,7 +733,11 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
         if (jugador == null) {
             jugador = manejo.getJugador();
             if (jugador != null && chat == null && skinUI != null) {
-                chat = new Chat(skinUI, jugador, camara);
+                chat = new Chat(skinUI, jugador, camara, mensaje -> {
+                    if (hiloCliente != null) {
+                        hiloCliente.sendChat(mensaje);
+                    }
+                });
                 inventario = new Inventario(stageInventario, skinUI, jugador);
                 tiendaHippie = Tienda.crearTiendaHippie();
             }
@@ -932,20 +956,50 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
         // El hilo de red no tiene contexto OpenGL; pasamos todo al hilo de render con postRunnable
         Gdx.app.postRunnable(() -> {
             if (numPlayer == idJugadorLocal) return;
+            // No instanciamos al remoto hasta recibir coords válidas para evitar sprites "fantasma" en el centro
+            if (x < 0 || y < 0) {
+                if (jugador != null && hiloCliente != null && idJugadorLocal > 0) {
+                    hiloCliente.sendPosition(jugador.getPersonajeX(), jugador.getPersonajeY());
+                }
+                return;
+            }
+
+            Jugador remoto = otrosJugadores.get(numPlayer);
+
+            if (remoto == null) {
+                remoto = new Jugador(colisiones);
+                try { remoto.getMochila().getItems().clear(); } catch (Exception ignored) {}
+                boolean esInterior = esMapaInterior(mapaActualPath);
+                remoto.setEscala(esInterior ? 0.7f : 1f);
+                otrosJugadores.put(numPlayer, remoto);
+                Gdx.app.log("NETWORK", "Creado jugador remoto id " + numPlayer);
+            }
+            remoto.setPos(x, y);
+            remoto.cancelarMovimiento();
+        });
+    }
+
+    @Override
+    public void updatePlayerPositionInMap(int numPlayer, float x, float y, String mapName) {
+        Gdx.app.postRunnable(() -> {
+            if (numPlayer == idJugadorLocal) return;
+            mapaJugadores.put(numPlayer, mapName);
+            // Si el remoto está en otro mapa, lo removemos para no dibujarlo
+            if (mapaActualPath != null && mapName != null && !mapaActualPath.equalsIgnoreCase(mapName)) {
+                otrosJugadores.remove(numPlayer);
+                return;
+            }
+            if (x < 0 || y < 0) return;
             Jugador remoto = otrosJugadores.get(numPlayer);
             if (remoto == null) {
                 remoto = new Jugador(colisiones);
                 try { remoto.getMochila().getItems().clear(); } catch (Exception ignored) {}
+                boolean esInterior = esMapaInterior(mapaActualPath);
+                remoto.setEscala(esInterior ? 0.7f : 1f);
                 otrosJugadores.put(numPlayer, remoto);
-                Gdx.app.log("NETWORK", "Creado jugador remoto id " + numPlayer);
             }
-            if (x >= 0 && y >= 0) {
-                remoto.setPos(x, y);
-                Gdx.app.log("NETWORK", "Pos remota id " + numPlayer + " -> ("+x+","+y+")");
-            } else if (jugador != null && hiloCliente != null && idJugadorLocal > 0) {
-                // El nuevo jugador nos avisó; reenviamos nuestra posición para sync
-                hiloCliente.sendPosition(jugador.getPersonajeX(), jugador.getPersonajeY());
-            }
+            remoto.setPos(x, y);
+            remoto.cancelarMovimiento();
         });
     }
 
@@ -957,6 +1011,24 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
     @Override
     public void updateScore(String score) {
         Gdx.app.log("NETWORK", "Score: " + score);
+    }
+
+    @Override
+    public void updateChatMessage(int numPlayer, String message) {
+        // El hilo de red es externo a OpenGL; usamos postRunnable para sincronizar
+        Gdx.app.postRunnable(() -> {
+            if (chat == null || message == null || message.isEmpty()) return;
+            Jugador target = (numPlayer == idJugadorLocal) ? jugador : otrosJugadores.get(numPlayer);
+            // Si aún no conocemos al jugador remoto, lo creamos para poder dibujar el globo
+            if (target == null && numPlayer != idJugadorLocal) {
+                target = new Jugador(colisiones);
+                otrosJugadores.put(numPlayer, target);
+            }
+            Gdx.app.log("CHAT", "Mostrar mensaje de id=" + numPlayer + " -> " + message);
+            if (target != null) {
+                chat.showMessage(target, message);
+            }
+        });
     }
 
     @Override

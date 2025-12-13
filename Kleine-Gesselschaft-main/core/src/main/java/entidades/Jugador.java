@@ -325,6 +325,10 @@ public class Jugador extends Personaje {
         return hitbox.height;
     }
 
+    // Coordenadas de red (centro del personaje)
+    public float getCentroX() { return personajeX; }
+    public float getCentroY() { return personajeY; }
+
 
     public void setBloqueado(boolean b) {
         bloqueado = b;

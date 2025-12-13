@@ -15,9 +15,21 @@ import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.TextField;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+
 import entidades.Personaje;
+import utilidades.interfaces.ChatListener;
 
 public class Chat {
+
+        private static class ChatMessage {
+            String texto;
+            float tiempo;
+            ChatMessage(String texto) { this.texto = texto; }
+        }
+
         private final Stage escenarioChat;
         private static TextField campoTexto;
         private boolean chatVisible;
@@ -25,16 +37,15 @@ public class Chat {
         private SpriteBatch batch;
         private ShapeRenderer shapeRenderer;
         private final Camera camara;
-
-        // Para los globos de chat
-        private String mensajeActual;
-        private float tiempoMensaje;
+        private final Personaje personajeLocal;
+        private final Map<Personaje, ChatMessage> burbujas = new HashMap<>();
         private final float DURACION_MENSAJE = 5f; // segundos
-        private Personaje personaje;
+        private ChatListener listener;
 
-        public Chat(Skin skin, Personaje personaje, Camera camara) {
-            this.personaje = personaje;
+        public Chat(Skin skin, Personaje personaje, Camera camara, ChatListener listener) {
+            this.personajeLocal = personaje;
             this.camara = camara;
+            this.listener = listener;
             this.escenarioChat = new Stage(new ScreenViewport());
             this.batch = new SpriteBatch();
             this.fuente = new BitmapFont();
@@ -61,6 +72,14 @@ public class Chat {
             fuente.getData().setScale(0.8f); // Tamaño más pequeño para globos
         }
 
+        public Chat(Skin skin, Personaje personaje, Camera camara) {
+            this(skin, personaje, camara, null);
+        }
+
+        public void setChatListener(ChatListener listener) {
+            this.listener = listener;
+        }
+
         public void actualizar(float delta) {
             if (chatVisible) {
                 escenarioChat.act(delta);
@@ -81,19 +100,22 @@ public class Chat {
                 }
             }
 
-            // Actualizar tiempo del mensaje actual
-            if (mensajeActual != null) {
-                tiempoMensaje += delta;
-                if (tiempoMensaje >= DURACION_MENSAJE) {
-                    mensajeActual = null;
+            // Actualizar tiempo de los mensajes activos
+            Iterator<Map.Entry<Personaje, ChatMessage>> it = burbujas.entrySet().iterator();
+            while (it.hasNext()) {
+                Map.Entry<Personaje, ChatMessage> entry = it.next();
+                ChatMessage msg = entry.getValue();
+                msg.tiempo += delta;
+                if (msg.tiempo >= DURACION_MENSAJE) {
+                    it.remove();
                 }
             }
         }
 
         public void render() {
-            // Dibujar globo de chat si hay mensaje
-            if (mensajeActual != null && personaje != null) {
-                dibujarGloboChat();
+            // Dibujar globos de chat activos
+            for (Map.Entry<Personaje, ChatMessage> entry : burbujas.entrySet()) {
+                dibujarGloboChat(entry.getKey(), entry.getValue().texto);
             }
 
             // Dibujar interfaz de chat si está visible
@@ -102,8 +124,8 @@ public class Chat {
             }
         }
 
-        private void dibujarGloboChat() {
-            if (mensajeActual == null) return;
+        private void dibujarGloboChat(Personaje personaje, String mensaje) {
+            if (mensaje == null || personaje == null) return;
 
             if (camara != null) {
                 shapeRenderer.setProjectionMatrix(camara.combined);
@@ -117,7 +139,7 @@ public class Chat {
             float y = personaje.getPersonajeY() + personaje.getHeight() + 20;
 
             // Medir texto con GlyphLayout
-            GlyphLayout layout = new GlyphLayout(fuente, mensajeActual);
+            GlyphLayout layout = new GlyphLayout(fuente, mensaje);
             float anchoGlobo = layout.width + 20;
             float altoGlobo = layout.height + 15;
 
@@ -144,7 +166,7 @@ public class Chat {
             // Texto
             batch.begin();
             fuente.setColor(Color.BLACK);
-            fuente.draw(batch, mensajeActual, x - layout.width/2, y + altoGlobo/2 + layout.height/2);
+            fuente.draw(batch, mensaje, x - layout.width/2, y + altoGlobo/2 + layout.height/2);
             batch.end();
         }
 
@@ -166,12 +188,20 @@ public class Chat {
 
         private void enviarMensaje() {
             String mensaje = campoTexto.getText().trim();
-            if (!mensaje.isEmpty() && mensaje.length() <= 50) { // Límite de caracteres
-                mensajeActual = mensaje;
-                tiempoMensaje = 0f;
+            if (!mensaje.isEmpty() && mensaje.length() <= 80) { // Límite de caracteres
+                showMessage(personajeLocal, mensaje);
+                if (listener != null) {
+                    listener.onSendMessage(mensaje);
+                }
                 Gdx.app.log("CHAT", "Jugador: " + mensaje);
             }
             ocultarChat();
+        }
+
+        public void showMessage(Personaje personaje, String mensaje) {
+            if (personaje == null || mensaje == null || mensaje.isEmpty()) return;
+            ChatMessage msg = new ChatMessage(mensaje);
+            burbujas.put(personaje, msg);
         }
 
         public void resize(int width, int height) {
@@ -199,11 +229,7 @@ public class Chat {
 
 
         public void setPersonaje(Personaje personaje) {
-            this.personaje = personaje;
-        }
-
-        public String getMensajeActual() {
-            return mensajeActual;
+            // Mantener compatibilidad; ahora se usa personajeLocal en showMessage
         }
 
         public void setInputProcessor() {
