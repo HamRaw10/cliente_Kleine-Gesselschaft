@@ -5,6 +5,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.audio.Music;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -84,6 +85,9 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
     private Music musicaFondo;
     private Stage hud;
     private Label lblMonedas;
+    private Label lblDesconexion;
+    private float timerMensajeDesconexion = 0f;
+    private static final float DURACION_MENSAJE_DESCONEXION = 4f;
     private Skin skinUI;
     private boolean dineroInicializado = false;
     private Stage stageInventario; // Stage propio del inventario
@@ -383,6 +387,12 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
             lblMonedas.setPosition(10, Gdx.graphics.getHeight() - 30);
             hud.addActor(lblMonedas);
             if (jugador != null) lblMonedas.setText("Monedas: " + jugador.getDinero().getCantidad());
+
+            lblDesconexion = new Label("", skinUI);
+            lblDesconexion.setColor(Color.RED);
+            lblDesconexion.setPosition(10, 10);
+            lblDesconexion.setVisible(false);
+            hud.addActor(lblDesconexion);
         }
 
         // === Música de fondo ===
@@ -812,6 +822,12 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
 
         // Monedas HUD
         if (jugador != null && lblMonedas != null) lblMonedas.setText("Monedas: " + jugador.getDinero().getCantidad());
+        if (lblDesconexion != null && lblDesconexion.isVisible()) {
+            timerMensajeDesconexion -= delta;
+            if (timerMensajeDesconexion <= 0f) {
+                lblDesconexion.setVisible(false);
+            }
+        }
         if (hud != null) { hud.act(delta); hud.draw(); }
         if (menuMinijuegosAbierto && menuMinijuegos != null) {
             menuMinijuegos.render(delta);
@@ -871,6 +887,8 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
         if (inventario != null) inventario.resize(width, height);
         if (menuMinijuegos != null) menuMinijuegos.resize(width, height);
         if (hud != null) hud.getViewport().update(width, height, true);
+        if (lblMonedas != null) lblMonedas.setPosition(10, height - 30);
+        if (lblDesconexion != null) lblDesconexion.setPosition(10, 10);
         if (minijuegoActivo != null) minijuegoActivo.resize(width, height);
     }
 
@@ -1005,7 +1023,14 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
 
     @Override
     public void playerLeft(int numPlayer) {
-        Gdx.app.postRunnable(() -> otrosJugadores.remove(numPlayer));
+        Gdx.app.postRunnable(() -> {
+            otrosJugadores.remove(numPlayer);
+            if (lblDesconexion != null) {
+                lblDesconexion.setText("Usuario " + numPlayer + " desconectado");
+                lblDesconexion.setVisible(true);
+                timerMensajeDesconexion = DURACION_MENSAJE_DESCONEXION;
+            }
+        });
     }
 
     @Override

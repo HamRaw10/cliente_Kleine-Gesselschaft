@@ -7,6 +7,7 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,11 +25,13 @@ public class ServerThread extends Thread {
         float lastY;
         String currentMap;
         boolean hasPos;
+        volatile long lastSeenMs;
 
         ClientInfo(int id, InetAddress ip, int port) {
             this.id = id;
             this.ip = ip;
             this.port = port;
+            this.lastSeenMs = System.currentTimeMillis();
         }
 
         String getSocketKey() {
@@ -39,6 +42,7 @@ public class ServerThread extends Thread {
     private DatagramSocket socket;
     private final int serverPort = 5555;
     private volatile boolean end = false;
+    private static final long CLIENT_TIMEOUT_MS = 7000L;
     private final int MAX_CLIENTS = 4;
     private int connectedClients = 0;
     private final List<ClientInfo> clients = new ArrayList<>();
@@ -47,6 +51,7 @@ public class ServerThread extends Thread {
     public ServerThread(GameController gameController) throws SocketException {
         this.gameController = gameController;
         socket = new DatagramSocket(serverPort);
+        socket.setSoTimeout(250);
         socket.setBroadcast(true);
         setName("ServerThread");
         setDaemon(true);
@@ -59,6 +64,9 @@ public class ServerThread extends Thread {
             try {
                 socket.receive(packet);
                 processMessage(packet);
+                pruneInactiveClients();
+            } catch (SocketTimeoutException ignored) {
+                pruneInactiveClients();
             } catch (IOException e) {
                 if (!end) {
                     e.printStackTrace();
@@ -72,6 +80,9 @@ public class ServerThread extends Thread {
         if (message.isEmpty()) return;
         String[] parts = message.split(":");
         int index = findClientIndex(packet);
+        if (index != -1) {
+            clients.get(index).lastSeenMs = System.currentTimeMillis();
+        }
 
         switch (parts[0]) {
             case "Connect":
@@ -153,6 +164,22 @@ public class ServerThread extends Thread {
             broadcast("Start", -1);
             if (gameController != null) {
                 gameController.start();
+            }
+        }
+    }
+
+    private void pruneInactiveClients() {
+        if (clients.isEmpty()) return;
+        long now = System.currentTimeMillis();
+        for (int i = clients.size() - 1; i >= 0; i--) {
+            ClientInfo client = clients.get(i);
+            if (now - client.lastSeenMs > CLIENT_TIMEOUT_MS) {
+                clients.remove(i);
+                connectedClients = Math.max(0, connectedClients - 1);
+                broadcast("PlayerLeft:" + client.id, client.id);
+                if (connectedClients == 0 && gameController != null) {
+                    gameController.backToMenu();
+                }
             }
         }
     }
