@@ -99,6 +99,7 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
     private ScreenAdapter minijuegoActivo;
     private ClientThread hiloCliente;
     private static ServerThread hiloServidor;
+    private final boolean embeddedServerEnabled = isEmbeddedServerEnabled();
     private final Map<Integer, Jugador> otrosJugadores = new HashMap<>();
     private final Map<Integer, String> mapaJugadores = new HashMap<>();
     private int idJugadorLocal = -1;
@@ -138,6 +139,10 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
     }
 
     private void iniciarServidorSiPosible() {
+        if (!embeddedServerEnabled) {
+            Gdx.app.log("NETWORK", "Servidor embebido deshabilitado (usa KLEINE_EMBEDDED_SERVER=true para activarlo).");
+            return;
+        }
         if (hiloServidor != null && hiloServidor.isAlive()) return;
         try {
             hiloServidor = new ServerThread(this);
@@ -1064,5 +1069,18 @@ public class PantallaJuego extends ScreenAdapter implements GameController {
     @Override
     public void backToMenu() {
         // Se puede implementar flujo de menú; por ahora no-op para no romper la pantalla.
+    }
+
+
+    private boolean isEmbeddedServerEnabled() {
+        String prop = System.getProperty("kleine.embeddedServer");
+        if (prop == null || prop.trim().isEmpty()) {
+            prop = System.getenv("KLEINE_EMBEDDED_SERVER");
+        }
+        if (prop == null) return false;
+        String normalized = prop.trim();
+        return normalized.equalsIgnoreCase("true") ||
+            normalized.equalsIgnoreCase("1") ||
+            normalized.equalsIgnoreCase("yes");
     }
 }

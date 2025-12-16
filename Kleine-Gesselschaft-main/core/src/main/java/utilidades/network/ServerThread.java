@@ -101,6 +101,9 @@ public class ServerThread extends Thread {
             case "Disconnect":
                 handleDisconnect(index);
                 break;
+            case "DiscoverServer":
+                handleDiscoveryProbe(packet);
+                break;
             default:
                 break;
         }
@@ -245,6 +248,10 @@ public class ServerThread extends Thread {
         ClientInfo sender = clients.get(index);
         System.out.println("CHAT RECV de " + sender.id + ": " + text);
         broadcast("Chat:" + sender.id + ":" + text, -1);
+    }
+
+    private void handleDiscoveryProbe(DatagramPacket packet) {
+        sendMessage("ServerHere:" + serverPort, packet.getAddress(), packet.getPort());
     }
 
     private int findClientIndex(DatagramPacket packet) {

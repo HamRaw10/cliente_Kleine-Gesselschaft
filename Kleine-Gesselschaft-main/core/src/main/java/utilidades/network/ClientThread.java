@@ -4,23 +4,35 @@ import utilidades.interfaces.GameController;
 
 import java.io.IOException;
 import java.net.*;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class ClientThread extends Thread {
 
     private DatagramSocket socket;
     private int serverPort = 5555;
-    private String ipServerStr = "127.0.0.1";
-    private InetAddress ipServer;
+    private volatile InetAddress ipServer;
     private boolean end = false;
     private GameController gameController;
     private int playerId = -1;
+    private static final String BROADCAST_IP = "255.255.255.255";
+    private static final int DISCOVERY_TIMEOUT_MS = 1500;
+    private static final int DISCOVERY_RETRY_MS = 2000;
+    private static final String DISCOVERY_MESSAGE = "DiscoverServer";
+    private static final String DISCOVERY_RESPONSE = "ServerHere";
+    private volatile boolean discoveryInProgress = false;
+    private long lastDiscoveryRequestMs = 0L;
+    private final Queue<String> pendingMessages = new ConcurrentLinkedQueue<>();
 
     public ClientThread(GameController gameController) {
         try {
             this.gameController = gameController;
-            ipServer = InetAddress.getByName(ipServerStr);
             socket = new DatagramSocket();
             socket.setBroadcast(true);
+            ipServer = resolveInitialServerAddress();
+            if (ipServer == null) {
+                requestDiscoveryAsync();
+            }
         } catch (SocketException | UnknownHostException e) {
 //            throw new RuntimeException(e);
         }
@@ -104,21 +116,20 @@ public class ClientThread extends Thread {
             case "Disconnect":
                 this.gameController.backToMenu();
                 break;
+            case "ServerHere":
+                handleServerAnnouncement(packet);
+                break;
         }
 
     }
 
     public void sendMessage(String message) {
-        if (message.startsWith("Chat:")) {
-            System.out.println("TX -> " + message + " a " + ipServer + ":" + serverPort);
+        if (ipServer == null) {
+            enqueuePending(message);
+            requestDiscoveryAsync();
+            return;
         }
-        byte[] byteMessage = message.getBytes();
-        DatagramPacket packet = new DatagramPacket(byteMessage, byteMessage.length, ipServer, serverPort);
-        try {
-            socket.send(packet);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        performSend(message);
     }
 
     public void sendConnect(float x, float y, String mapName) {
@@ -195,6 +206,114 @@ public class ClientThread extends Thread {
                 gameController.updatePlayerPositionInMap(pid, x, y, map);
             }
         } catch (Exception ignored) {
+        }
+    }
+
+    private InetAddress resolveInitialServerAddress() throws UnknownHostException {
+        String configuredHost = getConfiguredServerHost();
+        if (configuredHost != null) {
+            return InetAddress.getByName(configuredHost);
+        }
+        return tryDiscoverServer();
+    }
+
+    private String getConfiguredServerHost() {
+        String prop = System.getProperty("kleine.server.ip");
+        if (prop != null && !prop.trim().isEmpty()) {
+            return prop.trim();
+        }
+        String env = System.getenv("KLEINE_SERVER_IP");
+        if (env != null && !env.trim().isEmpty()) {
+            return env.trim();
+        }
+        return null;
+    }
+
+    private void handleServerAnnouncement(DatagramPacket packet) {
+        InetAddress address = packet.getAddress();
+        if (address == null) return;
+        onServerResolved(address);
+    }
+
+    private InetAddress tryDiscoverServer() {
+        DatagramSocket discoverySocket = null;
+        try {
+            discoverySocket = new DatagramSocket();
+            discoverySocket.setBroadcast(true);
+            discoverySocket.setSoTimeout(DISCOVERY_TIMEOUT_MS);
+            byte[] data = DISCOVERY_MESSAGE.getBytes();
+            DatagramPacket packet = new DatagramPacket(
+                data, data.length, InetAddress.getByName(BROADCAST_IP), serverPort);
+            discoverySocket.send(packet);
+            DatagramPacket response = new DatagramPacket(new byte[256], 256);
+            while (true) {
+                discoverySocket.receive(response);
+                String msg = new String(response.getData(), 0, response.getLength()).trim();
+                if (msg.startsWith(DISCOVERY_RESPONSE)) {
+                    InetAddress addr = response.getAddress();
+                    onServerResolved(addr);
+                    return addr;
+                }
+            }
+        } catch (IOException ignored) {
+            System.out.println("NETWORK Client: no se pudo descubrir servidor por broadcast");
+        } finally {
+            if (discoverySocket != null) {
+                discoverySocket.close();
+            }
+        }
+        return null;
+    }
+
+    private void requestDiscoveryAsync() {
+        if (socket == null) return;
+        long now = System.currentTimeMillis();
+        if (now - lastDiscoveryRequestMs < DISCOVERY_RETRY_MS) return;
+        if (discoveryInProgress) return;
+        discoveryInProgress = true;
+        lastDiscoveryRequestMs = now;
+        new Thread(() -> {
+            try {
+                InetAddress addr = tryDiscoverServer();
+            } finally {
+                discoveryInProgress = false;
+            }
+        }, "ClientDiscovery").start();
+    }
+
+    private void enqueuePending(String message) {
+        if (pendingMessages.size() > 50) {
+            pendingMessages.poll();
+        }
+        pendingMessages.offer(message);
+    }
+
+    private void performSend(String message) {
+        if (message.startsWith("Chat:")) {
+            System.out.println("TX -> " + message + " a " + ipServer + ":" + serverPort);
+        }
+        byte[] byteMessage = message.getBytes();
+        DatagramPacket packet = new DatagramPacket(byteMessage, byteMessage.length, ipServer, serverPort);
+        try {
+            socket.send(packet);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void flushPendingMessages() {
+        if (ipServer == null) return;
+        String pending;
+        while ((pending = pendingMessages.poll()) != null) {
+            performSend(pending);
+        }
+    }
+
+    private void onServerResolved(InetAddress address) {
+        this.ipServer = address;
+        if (address != null) {
+            System.out.println("NETWORK Client: usando servidor " + address.getHostAddress());
+            flushPendingMessages();
         }
     }
 }
